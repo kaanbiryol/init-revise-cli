@@ -1,6 +1,6 @@
 import SwiftSyntax
 
-final class InitReviser: SyntaxRewriter {
+final class InitRewriter: SyntaxRewriter {
     private let expressionTypes: [ExpressionType]
     private var tokensToRemove: [TokenSyntax] = []
     
@@ -17,7 +17,6 @@ final class InitReviser: SyntaxRewriter {
         return revise(targetToken)
     }
     
-    // .init(
     private func targetToken( _ token: TokenSyntax) -> TokenSyntax? {
         guard token.tokenKind == .prefixPeriod else { return nil }
         guard let initToken = token.nextToken, initToken.tokenKind == .initKeyword else { return nil }
@@ -26,13 +25,31 @@ final class InitReviser: SyntaxRewriter {
         return token
     }
     
-    // . replaces // sourcekit seems to give us the end offset?
     private func revise(_ token: TokenSyntax) -> TokenSyntax {
         let offset = token.byteRange.endOffset - 1
-        let prev = token.previousToken?.byteRange.offset
         guard let actualExpressionType = expressionTypes.first(where: { $0.offset == offset }) else { return token }
-        let newToken = token.withKind(.identifier(actualExpressionType.type))
+        let formattedType = formatExpressionType(type: actualExpressionType.type)
+        let newToken = token.withKind(.identifier(formattedType))
         return newToken
+    }
+    
+    private func formatExpressionType(type: String) -> String {
+        // convert array literal to actual type
+        if type.contains("ArrayLiteralElement") {
+            if let startIndex = type.firstIndex(of: "<"),
+               let endIndex = type.firstIndex(of: ">") {
+                let start = type.index(after: startIndex)
+                let extractedSubstring = type[start..<endIndex]
+                return stripOptionalIfNeeded(type: String(extractedSubstring))
+            }
+        }
+        return stripOptionalIfNeeded(type: type)
+    }
+    
+    // there is no optional initialiation
+    private func stripOptionalIfNeeded(type: String) -> String {
+        guard type.last == "?" else { return type }
+        return String(type.dropLast())
     }
     
     private func remove(token: TokenSyntax) -> TokenSyntax {

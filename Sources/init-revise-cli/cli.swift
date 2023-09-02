@@ -20,7 +20,7 @@ struct cli: ParsableCommand {
         let sourceCode = try String(contentsOf: fileURL, encoding: .utf8)
         let parsedSourceFile = Parser.parse(source: sourceCode)
 
-        let newSourceCode = InitReviser(expressionTypes: expressions.types).visit(parsedSourceFile)
+        let newSourceCode = InitRewriter(expressionTypes: expressions.types).visit(parsedSourceFile)
         try newSourceCode.description.write(to: fileURL, atomically: true, encoding: .utf8)
     }
 }
