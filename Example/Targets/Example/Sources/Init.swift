@@ -1,5 +1,7 @@
 import ExampleKit
 
+typealias MyType = Int
+
 func doSomething(model: Test.ViewModel) {
     print(model.value)
 }
@@ -14,6 +16,14 @@ func doSomethingArray(model: [Test.ViewModel]) {
 
 func doSomethingArrayOptional(model: [Test.ViewModel?]) {
     print(model.count)
+}
+
+func doSomethingOptionalArray(model: [Test.ViewModel]?) {
+    print(model?.count)
+}
+
+func doSomethingTypealias(model: MyType) {
+    print(model)
 }
  
 class Revise {
@@ -30,5 +40,9 @@ class Revise {
             .init(value: "7"),
             nil
         ])
+        doSomethingOptionalArray(model: [
+            .init(value: "8")
+        ])
+        doSomethingTypealias(model: 9)
     }
 }
