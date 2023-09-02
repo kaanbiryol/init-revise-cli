@@ -46,7 +46,7 @@ final class InitRewriter: SyntaxRewriter {
         return stripOptionalIfNeeded(type: type)
     }
     
-    // there is no optional initialiation
+    // there is no optional initialization
     private func stripOptionalIfNeeded(type: String) -> String {
         guard type.last == "?" else { return type }
         return String(type.dropLast())
