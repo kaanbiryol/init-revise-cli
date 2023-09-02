@@ -26,7 +26,6 @@ func expressionRequest(sourceFile: String, compilerArgs: [String]) -> String {
         - \"com.apple.dt.toolchain.XcodeDefault\"
     key.compilerargs:\n
     """
-    source
     for arg in compilerArgs {
         let argString = """
         - "\(arg)"\n
