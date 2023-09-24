@@ -1,8 +1,11 @@
 import Foundation
 import XCTest
 
+@testable import Example
+
 final class ExampleTests: XCTestCase {
     func test_twoPlusTwo_isFour() {
-        XCTAssertEqual(2+2, 4)
+        let value = doSomethingInApp(appStruct: .init(value: "value"))
+        XCTAssertEqual(value, "value")
     }
 }

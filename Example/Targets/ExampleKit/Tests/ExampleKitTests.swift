@@ -1,8 +1,11 @@
 import Foundation
 import XCTest
 
+@testable import ExampleKit
+
 final class ExampleKitTests: XCTestCase {
     func test_example() {
-        XCTAssertEqual("ExampleKit", "ExampleKit")
+        let value = doSomethingForTestTarget(model: .init(value: "value"))
+        XCTAssertEqual(value, "value")
     }
 }

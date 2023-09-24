@@ -16,3 +16,7 @@ public struct Test {
     }
     
 }
+
+func doSomethingForTestTarget(model: Test.ViewModel) -> String {
+    return model.value
+}
