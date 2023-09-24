@@ -1,73 +1,98 @@
 #!/usr/bin/env ruby
 require 'json'
-require 'open3'
+require 'xcodeproj'
 
-$workspacePath = ARGV[0]
-$schemes = ARGV[1]
-$silent = false
+$workspacePath = File.expand_path(ARGV[0])
+$projectPath = File.expand_path(ARGV[1])
 
-ARGV.each do |arg|
-    case arg
-    when '--silent'
-        $silent = true
+$xcodeproj = Xcodeproj::Project.open($projectPath)
+$allTargets = $xcodeproj.targets
+
+$workspace = Xcodeproj::Workspace.new_from_xcworkspace($workspacePath)
+$allSchemes = $workspace.schemes.to_a
+
+$allTargetsBuildSettingsJSON = JSON.parse(`xcodebuild -project #{$projectPath} -alltargets -arch arm64 -sdk iphonesimulator -showBuildSettingsForIndex -json`)
+
+def getKey(json)
+    if json.is_a?(Hash)
+        return json.keys
+    else
+        return []
     end
 end
 
-def listSchemes(workspacePath)
-    `xcodebuild -list -workspace #{workspacePath}`
-end
-
-# -destination 'platform=iOS Simulator,name=iPhone 14 Pro,OS=16.4'
-def buildSettingsForIndex(workspacePath, scheme)
-    stdout, stderr, status = Open3.capture3("xcodebuild -workspace #{workspacePath} -scheme #{scheme} -showBuildSettings -showdestinations -showBuildSettingsForIndex -verbose")
-    if !$silent 
-        puts stdout
-    end
-    return stdout
-end
-
-def rewrite(file, scheme, rawBuildSettings)
-    ## Remove extra information from the output
-    extractedBuildSettings = rawBuildSettings.match(/Build settings for target #{scheme}:(.*)/m)[1].strip
-    buildSettings = JSON.parse(extractedBuildSettings)
-    compilerArgs = buildSettings[file]["swiftASTCommandArguments"]
-    # compilerArgs = astArguments.drop(4) #drop -modulename "ModuleName" arguments
-    compilerArgs = compilerArgs.join(" ")
-    puts "Revising #{file} in #{scheme}"
-    stdout, stderr, status = Open3.capture3("./init-revise-cli #{file} -- #{compilerArgs}")
-    if !$silent 
-        puts stdout
+def revise(targetFiles, targetBuildSettings, compilerArgs)
+    for file in targetFiles do
+        if !targetBuildSettings[file]["swiftASTCommandArguments"].nil?
+            compilerArgs += targetBuildSettings[file]["swiftASTCommandArguments"]
+        end
+        if compilerArgs.empty?
+            next
+        end
+        args = compilerArgs.join(" ")
+        puts "Revising #{file}"
+        `./init-revise-cli #{file} -- #{args}`
     end
 end
 
-def findSchemeDirectory(directory_path, folder_name)
-    matching_folders = []
-    Dir.glob(File.join(directory_path, '**', folder_name)).each do |folder|
-        if File.directory?(folder)
-            matching_folders << folder
+def findTargetDependencies(target_name)
+    target = $xcodeproj.targets.find { |t| t.name == target_name }
+    return [] unless target
+    dependencies = target.dependencies.map do |dependency|
+        dependency.target.name
+    end
+    return dependencies
+end
+
+def getDependencyCompilerArgs(target) 
+    compilerArgs = []
+    dependencies = findTargetDependencies(target.name)
+    for dependency in dependencies do
+        dependencyTargetName = $allTargets.find { |target| target.name == dependency }.name
+        dependencyBuildSettings = $allTargetsBuildSettingsJSON[dependencyTargetName]
+        dependencyFiles = getKey(dependencyBuildSettings)
+        for dependencyFile in dependencyFiles do
+            if !dependencyBuildSettings[dependencyFile]["swiftASTCommandArguments"].nil?
+                compilerArgs += dependencyBuildSettings[dependencyFile]["swiftASTCommandArguments"]
+            end
         end
     end
-    matching_folders
+    return compilerArgs
 end
 
-def findSwiftFiles(directory_path)
-    swift_files = []
-    Dir.glob(File.join(directory_path, '**', '*.swift')).each do |swift_file|
-        swift_files << swift_file
+def reviseTargets(targets)
+    for target in targets do 
+        targetBuildSettings = $allTargetsBuildSettingsJSON[target.name]
+        targetFiles = getKey(targetBuildSettings)
+        compilerArgs = getDependencyCompilerArgs(target)
+        revise(targetFiles, targetBuildSettings, compilerArgs)
     end
-    swift_files
 end
 
-schemes = $schemes.split(" ")
+def reviseSchemes(schemes)
+    for target in schemes
+        schemeBuildSettings = JSON.parse(`xcodebuild -workspace #{$workspacePath} -scheme #{target.name} -arch arm64 -sdk iphonesimulator -showBuildSettingsForIndex -json`)
+        targetBuildSettings = schemeBuildSettings[target.name]
+        targetFiles = getKey(targetBuildSettings)
+        compilerArgs = getDependencyCompilerArgs(target)
+        revise(targetFiles, targetBuildSettings, compilerArgs)
+    end
+end
 
-for scheme in schemes do
-    rawBuildSettings = buildSettingsForIndex($workspacePath, scheme)
-    schemeDirectory = findSchemeDirectory(Dir.pwd, scheme)
-    files = findSwiftFiles(Dir.pwd)
-    for file in files do
-        begin
-            rewrite(file, scheme, rawBuildSettings)
-        rescue
+def separateSchemesAndTargets()
+    schemes = []
+    targets = []
+    
+    $allTargets.each do |target|
+        if $allSchemes.any? { |scheme| target.name == scheme[0] }
+            schemes << target
+        else
+            targets << target
         end
     end
+    return [schemes, targets]
 end
+
+schemesAndTargets = separateSchemesAndTargets()
+reviseSchemes(schemesAndTargets[0])
+reviseTargets(schemesAndTargets[1])
