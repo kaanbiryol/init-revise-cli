@@ -2,6 +2,7 @@
 
 replaces type-inferred initializations with static ones.
 
+- cd Example && mise install && tuist generate 
 - `make build` to build the cli tool.
 - `make test` runs the tool for the `Example` project. see the changes on `Example/Targets/Example/Sources/Init.swift` after running.
 
