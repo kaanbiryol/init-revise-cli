@@ -1,6 +1,6 @@
 # init-revise-cli
 
-A Swift CLI tool that replaces type-inferred `.init(...)` calls with explicit type initializations using SourceKit type information.
+A Swift CLI that rewrites `.init(...)` calls to explicit type initializers using SourceKit type resolution - reducing Swift type-checker overhead in large codebases.
 
 ```swift
 // before
@@ -10,73 +10,66 @@ doSomething(model: .init(value: "1"))
 doSomething(model: Test.ViewModel(value: "1"))
 ```
 
-Handles optionals, arrays, and nested types.
-
 ## Why?
 
-Using `.init(...)` instead of explicit type names can significantly slow down the Swift type checker, especially in complex expressions with generics or nested calls. Related Swift Forums discussions:
+Implicit `.init(...)` forces the Swift type checker to infer types from context. In complex expressions with generics or deeply nested calls, this can **dramatically increase build times**.
+
+Replacing `.init(...)` with explicit types gives the compiler a direct resolution path.
 
 - [Why does adding a type name here speed up typechecking so much?](https://forums.swift.org/t/why-does-adding-a-type-name-here-speed-up-typechecking-so-much/66240)
 - [Surprising compilation performance of nested .init() vs Constructable()](https://forums.swift.org/t/surprising-compilation-performance-of-nested-init-vs-constructable/69052)
 
+## What it does
+
+- Queries SourceKit for resolved expression types using your project's compiler arguments
+- Parses Swift source files into an AST via [swift-syntax](https://github.com/swiftlang/swift-syntax)
+- Replaces `.init(...)` tokens with fully-qualified type names
+- Handles optionals, arrays, and nested types
+- Rewrites files in place (atomic writes)
+
 ## Requirements
 
 - macOS 13+
-- Xcode (default toolchain)
-- Ruby with the `xcodeproj` gem (for `run.rb`)
+- Xcode (full installation, default toolchain)
+- Ruby + `xcodeproj` gem (for batch mode via `run.rb`)
 
-## Build
+## Quick start
 
 ```sh
 make build
+./init-revise-cli <source-file> -- <compiler-args...>
 ```
-
-Produces the `init-revise-cli` binary in the project root.
 
 ## Usage
 
 ### Single file
 
 ```sh
-./init-revise-cli <source-file> -- <compiler-args...>
+./init-revise-cli MyFile.swift -- <compiler-args...>
 ```
 
-The tool rewrites the file in place.
-
-The compiler args are the same flags passed to `swiftc` when building the file. You can get them from Xcode's build settings:
+Compiler args are the same flags passed to `swiftc`. Extract them from Xcode:
 
 ```sh
-xcodebuild -project MyApp.xcodeproj -alltargets -arch arm64 -sdk iphonesimulator -showBuildSettingsForIndex -json
+xcodebuild -project MyApp.xcodeproj -alltargets -arch arm64 \
+  -sdk iphonesimulator -showBuildSettingsForIndex -json
 ```
 
-Look for the `swiftASTCommandArguments` key in the JSON output for each file.
+Look for `swiftASTCommandArguments` in the JSON output.
 
-### Xcode project (batch)
+### Batch mode (Xcode project)
 
-`run.rb` processes all Swift files across targets and schemes in an Xcode project:
+`run.rb` processes all Swift files across targets and schemes, resolving per-file compiler arguments automatically:
 
 ```sh
 ./run.rb <workspace-path> <project-path>
 ```
 
-It resolves per-file compiler arguments and target dependencies automatically.
+> Defaults to `arm64` / `iphonesimulator`. Edit `run.rb` for other configurations.
 
-Edit `run.rb` if your project structure differs from the defaults (arm64, iphonesimulator).
+### Example project
 
-## Example
-
-The repo includes an `Example/` Xcode project with two targets:
-
-- **Example** - an iOS app target
-- **ExampleKit** - a framework target with `.init(...)` calls in `ExampleKit.swift` covering basic, optional, array, and nested patterns
-
-### Prerequisites
-
-- Xcode (full installation, not just Command Line Tools)
-- `xcodeproj` Ruby gem: `gem install xcodeproj`
-- [mise](https://mise.jdx.dev/) and [Tuist](https://tuist.io/) for generating the Xcode project
-
-### Running
+The repo includes an `Example/` Xcode project with `.init(...)` patterns across basic, optional, array, and nested cases.
 
 ```sh
 cd Example && mise install && tuist generate && cd ..
@@ -84,7 +77,7 @@ make build
 make test
 ```
 
-This runs the tool against all Swift files in the Example project. Check `Example/Targets/ExampleKit/Sources/ExampleKit.swift` for the results.
+Check `Example/Targets/ExampleKit/Sources/ExampleKit.swift` for the output. Reset with `git checkout -- Example/`.
 
 ### Expected output
 
@@ -112,10 +105,15 @@ doSomethingArray(model: [
 ])
 ```
 
-### Reset
+## How it works
 
-To restore the example files after running:
+1. **Type extraction** - sends a SourceKit request with the file path and compiler args to resolve expression types at each byte offset
+2. **AST rewriting** - walks the syntax tree via `SyntaxRewriter`, matches `.init(` tokens to their resolved types, and replaces them in place
+3. **File output** - writes the transformed source back atomically (UTF-8)
 
-```sh
-git checkout -- Example/
-```
+## Limitations
+
+- Requires **correct compiler arguments** - without them, SourceKit cannot resolve types
+- **In-place only** - no dry-run mode; use version control
+- Only targets `.init()` syntax (prefix-dot form) - does not transform `Self.init()` or already-explicit initializers
+- Silently skips expressions where SourceKit cannot determine the type
