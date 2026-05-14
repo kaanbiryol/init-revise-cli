@@ -1,5 +1,6 @@
 #!/usr/bin/env ruby
 require 'json'
+require 'open3'
 require 'xcodeproj'
 
 $workspacePath = File.expand_path(ARGV[0])
@@ -11,7 +12,16 @@ $allTargets = $xcodeproj.targets
 $workspace = Xcodeproj::Workspace.new_from_xcworkspace($workspacePath)
 $allSchemes = $workspace.schemes.to_a
 
-$allTargetsBuildSettingsJSON = JSON.parse(`xcodebuild -project #{$projectPath} -alltargets -arch arm64 -sdk iphonesimulator -showBuildSettingsForIndex -json`)
+$dependencyCompilerArgsCache = {}
+
+def xcodebuildJSON(*args)
+    output, status = Open3.capture2("xcodebuild", *args)
+    raise "xcodebuild failed: #{args.join(" ")}" unless status.success?
+
+    JSON.parse(output)
+end
+
+$allTargetsBuildSettingsJSON = xcodebuildJSON("-project", $projectPath, "-alltargets", "-arch", "arm64", "-sdk", "iphonesimulator", "-showBuildSettingsForIndex", "-json")
 
 def getKey(json)
     if json.is_a?(Hash)
@@ -21,17 +31,24 @@ def getKey(json)
     end
 end
 
-def revise(targetFiles, targetBuildSettings, compilerArgs)
+def initCandidate?(file)
+    File.file?(file) && File.read(file).match?(/\.\s*init\s*\(/)
+rescue Errno::ENOENT, Errno::EACCES
+    false
+end
+
+def revise(targetFiles, targetBuildSettings, dependencyCompilerArgs)
     for file in targetFiles do
-        if !targetBuildSettings[file]["swiftASTCommandArguments"].nil?
-            compilerArgs += targetBuildSettings[file]["swiftASTCommandArguments"]
-        end
+        fileCompilerArgs = targetBuildSettings[file]["swiftASTCommandArguments"]
+        next if fileCompilerArgs.nil? || fileCompilerArgs.empty?
+        next unless initCandidate?(file)
+
+        compilerArgs = dependencyCompilerArgs + fileCompilerArgs
         if compilerArgs.empty?
             next
         end
-        args = compilerArgs.join(" ")
         puts "Revising #{file}"
-        `./init-revise-cli #{file} -- #{args}`
+        raise "init-revise-cli failed for #{file}" unless system("./init-revise-cli", file, "--", *compilerArgs)
     end
 end
 
@@ -45,6 +62,9 @@ def findTargetDependencies(target_name)
 end
 
 def getDependencyCompilerArgs(target) 
+    cachedCompilerArgs = $dependencyCompilerArgsCache[target.name]
+    return cachedCompilerArgs unless cachedCompilerArgs.nil?
+
     compilerArgs = []
     dependencies = findTargetDependencies(target.name)
     for dependency in dependencies do
@@ -57,6 +77,7 @@ def getDependencyCompilerArgs(target)
             end
         end
     end
+    $dependencyCompilerArgsCache[target.name] = compilerArgs
     return compilerArgs
 end
 
@@ -71,7 +92,7 @@ end
 
 def reviseSchemes(schemes)
     for target in schemes
-        schemeBuildSettings = JSON.parse(`xcodebuild -workspace #{$workspacePath} -scheme #{target.name} -arch arm64 -sdk iphonesimulator -showBuildSettingsForIndex -json`)
+        schemeBuildSettings = xcodebuildJSON("-workspace", $workspacePath, "-scheme", target.name, "-arch", "arm64", "-sdk", "iphonesimulator", "-showBuildSettingsForIndex", "-json")
         targetBuildSettings = schemeBuildSettings[target.name]
         targetFiles = getKey(targetBuildSettings)
         compilerArgs = getDependencyCompilerArgs(target)

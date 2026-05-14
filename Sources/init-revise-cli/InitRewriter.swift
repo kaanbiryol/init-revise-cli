@@ -1,33 +1,31 @@
 import SwiftSyntax
 
 final class InitRewriter: SyntaxRewriter {
-    private let expressionTypes: [ExpressionType]
-    private var tokensToRemove: [TokenSyntax] = []
+    private let expressionTypesByOffset: [Int: ExpressionType]
+    private var shouldRemoveNextToken = false
     
     init(expressionTypes: [ExpressionType]) {
-        self.expressionTypes = expressionTypes
+        self.expressionTypesByOffset = expressionTypes.reduce(into: [:]) { result, expressionType in
+            if result[expressionType.offset] == nil {
+                result[expressionType.offset] = expressionType
+            }
+        }
     }
     
     override func visit(_ token: TokenSyntax) -> TokenSyntax {
-        guard tokensToRemove.isEmpty else {
-            tokensToRemove.remove(at: 0)
+        guard !shouldRemoveNextToken else {
+            shouldRemoveNextToken = false
             return remove(token: token)
         }
-        guard let targetToken = targetToken(token) else { return super.visit(token) }
-        return revise(targetToken)
-    }
-    
-    private func targetToken( _ token: TokenSyntax) -> TokenSyntax? {
-        guard token.tokenKind == .prefixPeriod else { return nil }
-        guard let initToken = token.nextToken, initToken.tokenKind == .initKeyword else { return nil }
-        guard let leftParanToken = token.nextToken?.nextToken, leftParanToken.tokenKind == .leftParen else { return nil }
-        tokensToRemove = [initToken]
-        return token
-    }
-    
-    private func revise(_ token: TokenSyntax) -> TokenSyntax {
+
+        guard token.tokenKind == .prefixPeriod else { return token }
+        guard let initToken = token.nextToken, initToken.tokenKind == .initKeyword else { return token }
+        guard let leftParenToken = initToken.nextToken, leftParenToken.tokenKind == .leftParen else { return token }
+
         let offset = token.byteRange.endOffset - 1
-        guard let actualExpressionType = expressionTypes.first(where: { $0.offset == offset }) else { return token }
+        guard let actualExpressionType = expressionTypesByOffset[offset] else { return token }
+
+        shouldRemoveNextToken = true
         let formattedType = formatExpressionType(type: actualExpressionType.type)
         let newToken = token.withKind(.identifier(formattedType))
         return newToken

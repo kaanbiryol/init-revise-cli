@@ -15,8 +15,27 @@ final class ExpressionTypeExtractor {
         let yaml = expressionRequest(sourceFile: sourceFile, compilerArgs: compilerArgs)
         let request = SourceKittenFramework.Request.yamlRequest(yaml: yaml)
         let response = try request.send()
-        let data = toJSON(toNSDictionary(response)).data(using: .utf8)!
-        let expression = try JSONDecoder().decode(ExpressionTypeResponse.self, from: data)
-        return expression
+        return ExpressionTypeResponse(types: parseExpressionTypes(response))
+    }
+
+    private func parseExpressionTypes(_ response: [String: SourceKitRepresentable]) -> [ExpressionType] {
+        let rawTypes: [[String: SourceKitRepresentable]]
+        if let typedRawTypes = response["key.expression_type_list"] as? [[String: SourceKitRepresentable]] {
+            rawTypes = typedRawTypes
+        } else if let representableRawTypes = response["key.expression_type_list"] as? [SourceKitRepresentable] {
+            rawTypes = representableRawTypes.compactMap { $0 as? [String: SourceKitRepresentable] }
+        } else {
+            return []
+        }
+
+        return rawTypes.compactMap { rawType in
+            guard let length = rawType["key.expression_length"] as? Int64,
+                  let offset = rawType["key.expression_offset"] as? Int64,
+                  let type = rawType["key.expression_type"] as? String else {
+                return nil
+            }
+
+            return ExpressionType(length: Int(length), offset: Int(offset), type: type)
+        }
     }
 }
