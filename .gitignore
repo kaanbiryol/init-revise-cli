@@ -47,6 +47,10 @@ Package.resolved
 .build/
 /init-revise-cli
 
+# Ruby / Bundler
+/.bundle/
+/vendor/bundle/
+
 # CocoaPods
 #
 # We recommend against adding the Pods directory to your .gitignore. However
