@@ -12,12 +12,9 @@ doSomething(model: Test.ViewModel(value: "1"))
 
 ## Why?
 
-Implicit `.init(...)` forces the Swift type checker to infer types from context. In complex expressions with generics or deeply nested calls, this can **dramatically increase build times**.
+Implicit `.init(...)` forces the Swift type checker to infer types from context. In complex expressions with generics or deeply nested calls, this can **increase build times**. (not always!)
 
 Replacing `.init(...)` with explicit types gives the compiler a direct resolution path.
-
-- [Why does adding a type name here speed up typechecking so much?](https://forums.swift.org/t/why-does-adding-a-type-name-here-speed-up-typechecking-so-much/66240)
-- [Surprising compilation performance of nested .init() vs Constructable()](https://forums.swift.org/t/surprising-compilation-performance-of-nested-init-vs-constructable/69052)
 
 ## What it does
 
@@ -29,9 +26,7 @@ Replacing `.init(...)` with explicit types gives the compiler a direct resolutio
 
 ## Requirements
 
-- macOS 13+
-- Xcode (full installation, default toolchain)
-- Ruby + `xcodeproj` gem (for batch mode via `run.rb`)
+- Ruby with Bundler (`bundle`)
 
 ## Quick start
 
@@ -62,7 +57,7 @@ Look for `swiftASTCommandArguments` in the JSON output.
 `run.rb` processes all Swift files across targets and schemes, resolving per-file compiler arguments automatically:
 
 ```sh
-./run.rb <workspace-path> <project-path>
+bundle exec ./run.rb <workspace-path> <project-path>
 ```
 
 > Defaults to `arm64` / `iphonesimulator`. Edit `run.rb` for other configurations.
@@ -70,6 +65,8 @@ Look for `swiftASTCommandArguments` in the JSON output.
 ### Example project
 
 The repo includes an `Example/` Xcode project with `.init(...)` patterns across basic, optional, array, and nested cases.
+
+The example project requires Tuist. Run `mise install` in `Example/` to install the pinned Tuist version, or install Tuist separately before running `tuist generate`.
 
 ```sh
 cd Example && mise install && tuist generate && cd ..
@@ -110,6 +107,11 @@ doSomethingArray(model: [
 1. **Type extraction** - sends a SourceKit request with the file path and compiler args to resolve expression types at each byte offset
 2. **AST rewriting** - walks the syntax tree via `SyntaxRewriter`, matches `.init(` tokens to their resolved types, and replaces them in place
 3. **File output** - writes the transformed source back atomically (UTF-8)
+
+## Additional sources
+
+- [Why does adding a type name here speed up typechecking so much?](https://forums.swift.org/t/why-does-adding-a-type-name-here-speed-up-typechecking-so-much/66240)
+- [Surprising compilation performance of nested .init() vs Constructable()](https://forums.swift.org/t/surprising-compilation-performance-of-nested-init-vs-constructable/69052)
 
 ## Limitations
 

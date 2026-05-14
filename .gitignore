@@ -45,6 +45,7 @@ Package.resolved
 .swiftpm
 
 .build/
+/init-revise-cli
 
 # CocoaPods
 #
