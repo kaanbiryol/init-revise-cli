@@ -42,6 +42,11 @@ Packages/
 Package.pins
 Package.resolved
 *.xcodeproj
+!Example/Example.xcodeproj/
+!Example/Example.xcodeproj/project.pbxproj
+!Example/Example.xcodeproj/xcshareddata/
+!Example/Example.xcodeproj/xcshareddata/xcschemes/
+!Example/Example.xcodeproj/xcshareddata/xcschemes/*.xcscheme
 .swiftpm
 
 .build/

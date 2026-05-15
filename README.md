@@ -57,6 +57,8 @@ Look for `swiftASTCommandArguments` in the JSON output.
 `run.rb` processes all Swift files across targets and schemes, resolving per-file compiler arguments automatically:
 
 ```sh
+bundle exec ./run.rb <project-path>
+# or, for workspace-based projects:
 bundle exec ./run.rb <workspace-path> <project-path>
 ```
 
@@ -64,17 +66,14 @@ bundle exec ./run.rb <workspace-path> <project-path>
 
 ### Example project
 
-The repo includes an `Example/` Xcode project with `.init(...)` patterns across basic, optional, array, and nested cases.
-
-The example project requires Tuist. Run `mise install` in `Example/` to install the pinned Tuist version, or install Tuist separately before running `tuist generate`.
+The repo includes a committed `Example/Example.xcodeproj` fixture with `.init(...)` patterns across basic, optional, array, and nested cases.
 
 ```sh
-cd Example && mise install && tuist generate && cd ..
 make build
 make test
 ```
 
-Check `Example/Targets/ExampleKit/Sources/ExampleKit.swift` for the output. Reset with `git checkout -- Example/`.
+Check `Example/Targets/ExampleKit/Sources/ExampleKit.swift` for the output. Reset with `git restore Example/Targets`.
 
 ### Expected output
 

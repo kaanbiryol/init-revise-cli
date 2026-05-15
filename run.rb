@@ -3,14 +3,27 @@ require 'json'
 require 'open3'
 require 'xcodeproj'
 
-$workspacePath = File.expand_path(ARGV[0])
-$projectPath = File.expand_path(ARGV[1])
+unless [1, 2].include?(ARGV.length)
+    abort "Usage: #{$PROGRAM_NAME} <project-path> or #{$PROGRAM_NAME} <workspace-path> <project-path>"
+end
+
+if ARGV.length == 1
+    $workspacePath = nil
+    $projectPath = File.expand_path(ARGV[0])
+else
+    $workspacePath = File.expand_path(ARGV[0])
+    $projectPath = File.expand_path(ARGV[1])
+end
 
 $xcodeproj = Xcodeproj::Project.open($projectPath)
 $allTargets = $xcodeproj.targets
 
-$workspace = Xcodeproj::Workspace.new_from_xcworkspace($workspacePath)
-$allSchemes = $workspace.schemes.to_a
+$allSchemes = if $workspacePath.nil?
+    Xcodeproj::Project.schemes($projectPath)
+else
+    workspace = Xcodeproj::Workspace.new_from_xcworkspace($workspacePath)
+    workspace.schemes.map(&:first)
+end
 
 $dependencyCompilerArgsCache = {}
 
@@ -92,7 +105,8 @@ end
 
 def reviseSchemes(schemes)
     for target in schemes
-        schemeBuildSettings = xcodebuildJSON("-workspace", $workspacePath, "-scheme", target.name, "-arch", "arm64", "-sdk", "iphonesimulator", "-showBuildSettingsForIndex", "-json")
+        schemeSource = $workspacePath.nil? ? ["-project", $projectPath] : ["-workspace", $workspacePath]
+        schemeBuildSettings = xcodebuildJSON(*schemeSource, "-scheme", target.name, "-arch", "arm64", "-sdk", "iphonesimulator", "-showBuildSettingsForIndex", "-json")
         targetBuildSettings = schemeBuildSettings[target.name]
         targetFiles = getKey(targetBuildSettings)
         compilerArgs = getDependencyCompilerArgs(target)
@@ -105,7 +119,7 @@ def separateSchemesAndTargets()
     targets = []
     
     $allTargets.each do |target|
-        if $allSchemes.any? { |scheme| target.name == scheme[0] }
+        if $allSchemes.any? { |scheme| target.name == scheme }
             schemes << target
         else
             targets << target

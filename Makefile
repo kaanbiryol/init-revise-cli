@@ -3,8 +3,8 @@
 bundle:
 	bundle install
 
-build: bundle
+build:
 	swift build --configuration release --arch arm64 && mv .build/arm64-apple-macosx/release/init-revise-cli .
 
-test: bundle
-	bundle exec ./run.rb "Example/Example.xcworkspace" "Example/Example.xcodeproj"
+test: build bundle
+	bundle exec ./run.rb "Example/Example.xcodeproj"
